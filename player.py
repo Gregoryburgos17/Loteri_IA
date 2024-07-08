@@ -1,4 +1,6 @@
-# player.py
+import matplotlib
+matplotlib.use('Agg')  # Usar el backend 'Agg' para evitar problemas con tkinter
+
 import random
 import numpy as np
 import sqlite3
@@ -15,8 +17,9 @@ def simulate_player(model, date, company, game, numbers_per_play, player_id):
         raise ValueError(f"Expected input shape {model.input_shape[1]}, but got {prediction_input.shape[1]}")
     prediction = model.predict(prediction_input)
     accuracy = calculate_accuracy(prediction[0], guess)
-    fractional_accuracy = calculate_fractional_accuracy(prediction[0], guess, numbers_per_play)
+    matches, fractional_accuracy = calculate_fractional_accuracy(prediction[0], guess, numbers_per_play)
     result_type = classify_result(accuracy)
+    print(f"Simulated player {player_id}: {result_type} with accuracy {accuracy} and {matches}/{numbers_per_play} matches")
     return {
         "player_id": player_id,
         "date": date,
@@ -31,7 +34,8 @@ def simulate_player(model, date, company, game, numbers_per_play, player_id):
 
 def calculate_fractional_accuracy(prediction, guess, numbers_per_play):
     matches = sum(1 for p, g in zip(prediction, guess) if p == g)
-    return matches / numbers_per_play
+    fractional_accuracy = matches / numbers_per_play
+    return matches, fractional_accuracy
 
 def classify_result(accuracy):
     if accuracy == 1.0:
@@ -60,6 +64,7 @@ def save_to_database(results):
             ''', (result['player_id'], result['date'], result['company'], result['game'], str(result['guess']), result['accuracy'], result['fractional_accuracy'], str(result['prediction']), result['result_type']))
     conn.commit()
     conn.close()
+    print(f"Saved {len(results)} results to the database.")
 
 def setup_database():
     conn = sqlite3.connect('lottery_predictions.db')
@@ -101,6 +106,7 @@ def setup_database():
     ''')
     conn.commit()
     conn.close()
+    print("Database setup completed.")
 
 def generate_statistics():
     conn = sqlite3.connect('lottery_predictions.db')
@@ -132,6 +138,7 @@ def generate_statistics():
 
     conn.commit()
     conn.close()
+    print("Statistics generated and saved to the database.")
 
 def run_simulation():
     setup_database()
@@ -148,16 +155,34 @@ def run_simulation():
         20: 'lottery_model_20.h5'
     }
 
+    models = {}
+    for numbers_per_play, model_path in model_paths.items():
+        if os.path.exists(model_path):
+            model = tf.keras.models.load_model(model_path)
+            model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+            models[numbers_per_play] = model
+            print(f"Loaded model for {numbers_per_play} numbers.")
+        else:
+            print(f"Model file {model_path} not found, skipping.")
+
+    simulation_count = 0
+    max_simulations = 100  # Limite de simulaciones
+
     for entry in lottery_data:
+        if simulation_count >= max_simulations:
+            break
         for player_id in range(4):
+            if simulation_count >= max_simulations:
+                break
             for game, details in entry['juegos'].items():
                 numbers_per_play = len(details['numeros'])
-                if numbers_per_play in model_paths:
-                    model_path = model_paths[numbers_per_play]
-                    model = tf.keras.models.load_model(model_path)
-                    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+                if numbers_per_play in models:
+                    model = models[numbers_per_play]
                     result = simulate_player(model, entry['fecha_solicitud'], entry['compania'], game, numbers_per_play, player_id)
                     all_predictions.append(result)
+                    simulation_count += 1
+                    if simulation_count >= max_simulations:
+                        break
 
     save_to_database(all_predictions)
     generate_statistics()
