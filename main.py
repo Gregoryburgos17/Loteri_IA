@@ -1,7 +1,6 @@
 # main.py
 import os
 import sqlite3
-import numpy as np
 import pandas as pd
 import matplotlib
 
@@ -26,6 +25,7 @@ def show_results():
 
     dates_predictions = pd.to_datetime(df_predictions['date'])
     accuracies = df_predictions['accuracy']
+    fractional_accuracies = df_predictions['fractional_accuracy']
     fallos_predictions = 1 - accuracies  # Calcular los fallos de predicción
 
     dates_failures = pd.to_datetime(df_failures['date'])
@@ -62,9 +62,12 @@ def show_results():
     plt.close()
 
     # Mostrar intentos de las redes
-    successful_attempts = df_predictions[df_predictions['result_type'] == 'exitoso']
-    partial_attempts = df_predictions[df_predictions['result_type'] == 'parcial']
-    failed_attempts = df_failures
+    if 'result_type' in df_predictions.columns:
+        successful_attempts = df_predictions[df_predictions['result_type'] == 'exitoso']
+        partial_attempts = df_predictions[df_predictions['result_type'] == 'parcial']
+    else:
+        successful_attempts = pd.DataFrame()
+        partial_attempts = pd.DataFrame()
 
     print("Intentos Exitosos:")
     print(successful_attempts)
@@ -73,7 +76,17 @@ def show_results():
     print(partial_attempts)
 
     print("Intentos Fallidos:")
-    print(failed_attempts)
+    print(df_failures)
+
+    # Graficar fracciones de aciertos
+    plt.figure(figsize=(10, 6))
+    plt.plot(dates_predictions, fractional_accuracies, label='Fracción de Aciertos', color='blue')
+    plt.xlabel('Fecha')
+    plt.ylabel('Fracción de Aciertos')
+    plt.title('Fracción de Aciertos de la Lotería')
+    plt.legend()
+    plt.savefig('fractional_accuracies_plot.png')
+    plt.close()
 
 def show_statistics():
     conn = sqlite3.connect('lottery_predictions.db')
@@ -128,7 +141,7 @@ def main():
     simulate_players()
     show_results()
     show_statistics()
-    manual_prediction()
+    # manual_prediction()
 
 if __name__ == "__main__":
     main()
